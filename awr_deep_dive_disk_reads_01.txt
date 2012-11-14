@@ -6,7 +6,8 @@ alter session set nls_date_format='YYYY.MM.DD HH24:MI:SS';
 set pagesize 9999 lines 180 
 column name for a22
 
-### per instance
+--  per instance
+column name for a25
 select 
         NAME, 
         VALUE, 
@@ -125,8 +126,8 @@ E_SNAP_DATE                 VAL_SEC          MB_SEC
 select 
 	trunc(b_snap_date,'HH') h_date, 
 	sum(snap_value) svalue, 
-	sum(snap_value/snap_secs) v_avg,
-	sum(snap_value/snap_secs)*v_db_block_size/1024/1024 mb_sec
+	trunc(sum(snap_value/snap_secs),2) v_avg,
+	trunc(sum(snap_value/snap_secs)*v_db_block_size/1024/1024,2) mb_sec
 from
 (select 
   s.INSTANCE_NUMBER,
@@ -149,6 +150,7 @@ where 1=1
 where snap_value > 0 
 group by trunc(b_snap_date,'HH'),v_db_block_size
 order by h_date;
+
 
 H_DATE                       SVALUE           V_AVG          MB_SEC
 ------------------- --------------- --------------- ---------------
@@ -430,7 +432,7 @@ NOTES:
 select a.*, 
 	trunc(DISK_READS*v_db_block_size/1024/1024/1024,2) Disk_Reads_TB, 
 	decode(0,EXECUTIONS,0,trunc((DISK_READS*v_db_block_size/1024/1024)/EXECUTIONS)) MB_P_EXE from
-(SELECT 
+(select * from (SELECT 
 	st.sql_id, 
 	st.PLAN_HASH_VALUE,
 	sum(st.DISK_READS_DELTA) DISK_READS,
@@ -444,9 +446,8 @@ AND tx.COMMAND_TYPE != 47
 AND sh.end_interval_time   > sysdate - 3
 AND st.DISK_READS_DELTA is not null
 group by st.sql_id, st.PLAN_HASH_VALUE
-order by sum(st.DISK_READS_DELTA) desc) a,
+order by sum(st.DISK_READS_DELTA) desc) where rownum < 11) a,
 (select VALUE v_db_block_size from v$parameter where name = 'db_block_size') p
-where rownum < 11
 order by sql_id;
 
 SQL_ID        PLAN_HASH_VALUE DISK_READS EXECUTIONS   MB_P_EXE
