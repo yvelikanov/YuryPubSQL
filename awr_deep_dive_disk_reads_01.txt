@@ -1,0 +1,544 @@
+======================================================================
+### Current 'physical reads','physical reads direct' average stats since last restart (per instance and totals)
+======================================================================
+
+alter session set nls_date_format='YYYY.MM.DD HH24:MI:SS';
+set pagesize 9999 lines 180 
+column name for a22
+
+### per instance
+select 
+        NAME, 
+        VALUE, 
+	trunc(((VALUE*v_db_block_size)/1024/1024)/((sysdate-STARTUP_TIME)*24*60*60),2) MB_P_SEC,
+        INSTANCE_NUMBER,
+        sysdate,
+	trunc((sysdate-STARTUP_TIME)*24*60) run_mins,
+        STARTUP_TIME
+from
+        gv$sysstat s, 
+        gv$instance i,
+	(select VALUE v_db_block_size from v$parameter where name = 'db_block_size')
+where
+        name in ('physical reads','physical reads direct')
+	and s.INST_ID=i.INST_ID
+order by NAME, INSTANCE_NUMBER;
+
+### totals
+select 
+        NAME, 
+	trunc(sum(((VALUE*v_db_block_size)/1024/1024)/((sysdate-STARTUP_TIME)*24*60*60)),2) MB_P_SEC,
+        sysdate
+from
+        gv$sysstat s, 
+        gv$instance i,
+	(select VALUE v_db_block_size from v$parameter where name = 'db_block_size')
+where
+        name in ('physical reads','physical reads direct')
+	and s.INST_ID=i.INST_ID
+group by name, sysdate
+order by NAME;
+
+
+NAME                        VALUE   MB_P_SEC INSTANCE_NUMBER SYSDATE               RUN_MINS STARTUP_TIME
+---------------------- ---------- ---------- --------------- ------------------- ---------- -------------------
+physical reads           31966401      33.45               1 2012.11.13 18:45:41        124 2012.11.13 16:41:16
+physical reads           14430448      15.09               2 2012.11.13 18:45:41        124 2012.11.13 16:41:11
+physical reads           10667323      11.15               3 2012.11.13 18:45:41        124 2012.11.13 16:41:11
+physical reads direct      345227        .36               1 2012.11.13 18:45:41        124 2012.11.13 16:41:16
+physical reads direct      343397        .35               2 2012.11.13 18:45:41        124 2012.11.13 16:41:11
+physical reads direct      554927        .58               3 2012.11.13 18:45:41        124 2012.11.13 16:41:11
+
+6 rows selected.
+
+
+NAME                     MB_P_SEC SYSDATE
+---------------------- ---------- -------------------
+physical reads              59.68 2012.11.13 18:45:44
+physical reads direct         1.3 2012.11.13 18:45:44
+
+
+======================================================================
+### Historical AWR based 'physical reads','physical reads direct' stats 
+======================================================================
+
+--- historical 'physical reads' values for a current instance
+select
+--  cast (s.BEGIN_INTERVAL_TIME as date) b_snap_date,
+  cast (s.END_INTERVAL_TIME as date) e_snap_date,
+--  trunc((cast(s.END_INTERVAL_TIME as date) - cast(s.BEGIN_INTERVAL_TIME as date))*24*60*60) snap_secs,
+--  trunc((t.VALUE-LAG (t.VALUE) OVER (ORDER BY s.BEGIN_INTERVAL_TIME))) snap_value,
+--  trunc((t.VALUE-LAG (t.VALUE) OVER (ORDER BY s.BEGIN_INTERVAL_TIME))*v_db_block_size/1024/1024) snap_mb,
+  trunc((t.VALUE-LAG (t.VALUE) OVER (ORDER BY s.BEGIN_INTERVAL_TIME))/((cast(s.END_INTERVAL_TIME as date) - cast(s.BEGIN_INTERVAL_TIME as date))*24*60*60)) VAL_SEC,
+  trunc(((t.VALUE-LAG (t.VALUE) OVER (ORDER BY s.BEGIN_INTERVAL_TIME))/((cast(s.END_INTERVAL_TIME as date) - cast(s.BEGIN_INTERVAL_TIME as date))*24*60*60))*v_db_block_size/1024/1024) MB_SEC
+from 
+  DBA_HIST_SNAPSHOT s,
+  DBA_HIST_SYSSTAT t,
+  (select VALUE v_db_block_size from v$parameter where name = 'db_block_size')
+where 1=1
+  and s.SNAP_ID = t.SNAP_ID
+  and s.DBID = t.DBID
+  and s.INSTANCE_NUMBER = t.INSTANCE_NUMBER 
+  and s.INSTANCE_NUMBER = (select INSTANCE_NUMBER from V$INSTANCE)
+  and s.DBID = (select DBID from V$DATABASE)
+  and t.STAT_NAME = 'physical reads'
+  and s.END_INTERVAL_TIME > sysdate - 2
+order by
+  s.BEGIN_INTERVAL_TIME;
+
+E_SNAP_DATE                 VAL_SEC          MB_SEC
+------------------- --------------- ---------------
+2012.11.12 01:00:22
+2012.11.12 02:00:08            2435              19
+2012.11.12 03:00:21            1093               8
+2012.11.12 04:00:31             620               4
+2012.11.12 05:00:38            2812              21
+2012.11.12 06:00:54            4057              31
+2012.11.12 07:00:01            1220               9
+2012.11.12 08:00:03             726               5
+2012.11.12 09:00:14             183               1
+2012.11.12 10:00:28             327               2
+2012.11.12 11:00:33            1407              10
+2012.11.12 12:00:42             711               5
+2012.11.12 13:00:47            1166               9
+2012.11.12 14:00:05            1618              12
+2012.11.12 15:00:01            1309              10
+2012.11.12 16:00:08             642               5
+2012.11.12 17:00:15            1156               9
+2012.11.12 18:00:19              93               0
+2012.11.12 19:00:26              52               0
+2012.11.12 20:00:33              17               0
+2012.11.12 21:00:40              40               0
+2012.11.12 22:00:11              16               0
+2012.11.12 23:00:19              90               0
+2012.11.13 00:00:33             656               5
+2012.11.13 01:00:10            2852              22
+2012.11.13 02:00:20            1362              10
+2012.11.13 03:00:07             104               0
+2012.11.13 04:00:14             176               1
+2012.11.13 05:00:20            1186               9
+2012.11.13 06:00:28            3129              24
+...
+
+
+-- Average 'physical reads' value per hour values of all RAC instances 
+select 
+	trunc(b_snap_date,'HH') h_date, 
+	sum(snap_value) svalue, 
+	sum(snap_value/snap_secs) v_avg,
+	sum(snap_value/snap_secs)*v_db_block_size/1024/1024 mb_sec
+from
+(select 
+  s.INSTANCE_NUMBER,
+  cast (s.END_INTERVAL_TIME as date) e_snap_date,
+  cast (s.BEGIN_INTERVAL_TIME as date) b_snap_date,
+  (cast(s.END_INTERVAL_TIME as date) - cast(s.BEGIN_INTERVAL_TIME as date))*24*60*60 snap_secs,
+  t.VALUE,
+  (t.VALUE-LAG (t.VALUE) OVER (ORDER BY s.INSTANCE_NUMBER, s.BEGIN_INTERVAL_TIME)) snap_value
+from 
+  DBA_HIST_SNAPSHOT s,
+  DBA_HIST_SYSSTAT t
+where 1=1
+  and s.SNAP_ID = t.SNAP_ID
+  and s.DBID = t.DBID
+  and s.INSTANCE_NUMBER = t.INSTANCE_NUMBER
+  and s.DBID = (select DBID from V$DATABASE)
+  and t.STAT_NAME = 'physical reads'
+  ) pr,
+  (select VALUE v_db_block_size from v$parameter where name = 'db_block_size')
+where snap_value > 0 
+group by trunc(b_snap_date,'HH'),v_db_block_size
+order by h_date;
+
+H_DATE                       SVALUE           V_AVG          MB_SEC
+------------------- --------------- --------------- ---------------
+2012.10.27 19:00:00      8149845598 2255076.2584394 17617.783269058
+2012.10.27 20:00:00         1440114 401.92966787608 3.1400755302819
+2012.10.27 21:00:00         1260783 350.80217028381 2.7406419553422
+2012.10.27 22:00:00         4534436 1244.3567508233 9.7215371158068
+2012.10.27 23:00:00         4060402 1144.0974922513 8.9382616582136
+2012.10.28 00:00:00         7987803 2218.2179950014 17.329828085948
+2012.10.28 01:00:00         7074571 1964.6128853096 15.348538166482
+2012.10.28 02:00:00         2133277 591.26302660754 4.6192423953714
+2012.10.28 03:00:00         3864686 1073.2257706193 8.3845763329631
+2012.10.28 04:00:00         5971101 1663.7227640011 12.997834093759
+2012.10.28 05:00:00        10205141 2825.3435769657 22.072996695044
+2012.10.28 06:00:00        14351694 3977.7422394678 31.076111245843
+2012.10.28 07:00:00         7425662 2049.9517484694 16.015248034917
+2012.10.28 08:00:00         2342742 659.06391482983  5.148936834608
+2012.10.28 09:00:00          841840 233.39062933185 1.8233642916551
+2012.10.28 10:00:00         1097607 305.65497076023 2.3879294590643
+2012.10.28 11:00:00          958367 264.59607951408 2.0671568712038
+2012.10.28 12:00:00          747160 207.48680921966 1.6209906970286
+2012.10.28 13:00:00         1017892 282.56747531169 2.2075584008726
+2012.10.28 14:00:00          721387 201.59464696163 1.5749581793878
+2012.10.28 15:00:00          520825 144.15305840022 1.1261957687517
+2012.10.28 16:00:00          439706 122.51490665924 .95714770827529
+2012.10.28 17:00:00          469547 130.28496115427 1.0178512590178
+2012.10.28 18:00:00         2003147 553.04997239094 4.3207029093043
+2012.10.28 19:00:00         1381768  387.2668161435 3.0255220011211
+2012.10.28 20:00:00          876333 243.22314737719 1.9001808388843
+2012.10.28 21:00:00         1487653 411.63613724405 3.2159073222191
+....
+
+
+--- Hourly based comparison between Physical reads and Direct Reads
+select
+    s1.h_date,
+    trunc(s1.v_avg,2) pyh_reads,
+    trunc(s2.v_avg,2) dir_reads,
+    trunc(s1.mb_sec,2) pyh_mb_s,
+    trunc(s2.mb_sec,2) dir_mb_s,
+    trunc((s2.v_avg/s1.v_avg)*100,2) R_PCT
+from 
+--S1-B-----------
+(
+select 
+	trunc(b_snap_date,'HH') h_date, 
+	sum(snap_value) svalue, 
+	sum(snap_value/snap_secs) v_avg,
+	sum(snap_value/snap_secs)*v_db_block_size/1024/1024 mb_sec
+from
+(select 
+  s.INSTANCE_NUMBER,
+  cast (s.END_INTERVAL_TIME as date) e_snap_date,
+  cast (s.BEGIN_INTERVAL_TIME as date) b_snap_date,
+  (cast(s.END_INTERVAL_TIME as date) - cast(s.BEGIN_INTERVAL_TIME as date))*24*60*60 snap_secs,
+  t.VALUE,
+  (t.VALUE-LAG (t.VALUE) OVER (ORDER BY s.INSTANCE_NUMBER, s.BEGIN_INTERVAL_TIME)) snap_value
+from 
+  DBA_HIST_SNAPSHOT s,
+  DBA_HIST_SYSSTAT t
+where 1=1
+  and s.SNAP_ID = t.SNAP_ID
+  and s.DBID = t.DBID
+  and s.INSTANCE_NUMBER = t.INSTANCE_NUMBER
+  and s.DBID = (select DBID from V$DATABASE)
+  and t.STAT_NAME = 'physical reads'
+  ) pr,
+  (select VALUE v_db_block_size from v$parameter where name = 'db_block_size')
+where snap_value > 0 
+group by trunc(b_snap_date,'HH'),v_db_block_size
+) S1,
+--S2-B-----------
+(
+select 
+	trunc(b_snap_date,'HH') h_date, 
+	sum(snap_value) svalue, 
+	sum(snap_value/snap_secs) v_avg,
+	sum(snap_value/snap_secs)*v_db_block_size/1024/1024 mb_sec
+from
+(select 
+  s.INSTANCE_NUMBER,
+  cast (s.END_INTERVAL_TIME as date) e_snap_date,
+  cast (s.BEGIN_INTERVAL_TIME as date) b_snap_date,
+  (cast(s.END_INTERVAL_TIME as date) - cast(s.BEGIN_INTERVAL_TIME as date))*24*60*60 snap_secs,
+  t.VALUE,
+  (t.VALUE-LAG (t.VALUE) OVER (ORDER BY s.INSTANCE_NUMBER, s.BEGIN_INTERVAL_TIME)) snap_value
+from 
+  DBA_HIST_SNAPSHOT s,
+  DBA_HIST_SYSSTAT t
+where 1=1
+  and s.SNAP_ID = t.SNAP_ID
+  and s.DBID = t.DBID
+  and s.INSTANCE_NUMBER = t.INSTANCE_NUMBER
+  and s.DBID = (select DBID from V$DATABASE)
+  and t.STAT_NAME = 'physical reads direct'
+  ) pr,
+  (select VALUE v_db_block_size from v$parameter where name = 'db_block_size')
+where snap_value > 0 
+group by trunc(b_snap_date,'HH'),v_db_block_size
+) S2
+--S2-E-----------
+where 1=1
+    and s1.h_date = s2.h_date (+)
+order by 
+    s1.h_date;
+
+
+
+H_DATE               PYH_READS  DIR_READS   PYH_MB_S   DIR_MB_S      R_PCT
+------------------- ---------- ---------- ---------- ---------- ----------
+2012.10.13 01:00:00   10722.21    2898.99      83.76      22.64      27.03
+2012.10.13 02:00:00   13505.83     5936.5     105.51      46.37      43.95
+2012.10.13 03:00:00   10856.14    2626.44      84.81      20.51      24.19
+2012.10.13 04:00:00   22908.99   17651.56     178.97      137.9      77.05
+2012.10.13 05:00:00   20658.43   14798.23     161.39     115.61      71.63
+2012.10.13 06:00:00   18575.12   11364.72     145.11      88.78      61.18
+2012.10.13 07:00:00   19374.95    13113.5     151.36     102.44      67.68
+2012.10.13 08:00:00   28190.66   24606.79     220.23     192.24      87.28
+2012.10.13 09:00:00   22944.93   19401.76     179.25     151.57      84.55
+2012.10.13 10:00:00   18685.26   14802.27     145.97     115.64      79.21
+2012.10.13 11:00:00   18380.51   15270.99     143.59      119.3      83.08
+2012.10.13 12:00:00   29598.14   24649.66     231.23     192.57      83.28
+2012.10.13 13:00:00   32637.06   29217.23     254.97     228.25      89.52
+2012.10.13 14:00:00   27745.13   24268.99     216.75      189.6      87.47
+2012.10.13 15:00:00    7833.69    5240.51       61.2      40.94      66.89
+2012.10.13 16:00:00    7347.62    4269.18       57.4      33.35       58.1
+2012.10.13 17:00:00    6947.16    3449.64      54.27      26.95      49.65
+2012.10.13 20:00:00     919.57     315.94       7.18       2.46      34.35
+2012.10.13 21:00:00     915.06     286.44       7.14       2.23       31.3
+2012.10.13 22:00:00    1519.24    1090.23      11.86       8.51      71.76
+2012.10.13 23:00:00     784.87     557.68       6.13       4.35      71.05
+2012.10.14 00:00:00     966.47     566.68       7.55       4.42      58.63
+2012.10.14 01:00:00    5458.59     1572.1      42.64      12.28       28.8
+2012.10.14 02:00:00   17195.63    6576.73     134.34      51.38      38.24
+2012.10.14 03:00:00    11750.7    4414.16       91.8      34.48      37.56
+2012.10.14 04:00:00    13990.2    8643.17     109.29      67.52      61.78
+2012.10.14 05:00:00   10642.39    5788.91      83.14      45.22      54.39
+2012.10.14 06:00:00   13224.08    6215.69     103.31      48.56         47
+2012.10.14 07:00:00    6055.25    2990.94       47.3      23.36      49.39
+2012.10.14 08:00:00    5178.98     2660.7      40.46      20.78      51.37
+2012.10.14 09:00:00    5188.33    2991.73      40.53      23.37      57.66
+2012.10.14 10:00:00    5412.47    3101.12      42.28      24.22      57.29
+2012.10.14 11:00:00    5347.69    3337.64      41.77      26.07      62.41
+2012.10.14 12:00:00    7947.45    3673.05      62.08      28.69      46.21
+2012.10.14 13:00:00    6040.06    3447.95      47.18      26.93      57.08
+2012.10.14 14:00:00    6041.23    3092.97      47.19      24.16      51.19
+2012.10.14 15:00:00    5816.53    3376.44      45.44      26.37      58.04
+2012.10.14 16:00:00    6468.12    3406.41      50.53      26.61      52.66
+2012.10.14 17:00:00   12500.21    8842.02      97.65      69.07      70.73
+...
+
+--- Daily based comparison between Physical reads and Direct Reads
+select
+    s1.h_date,
+    trunc(s1.v_avg,2) pyh_reads,
+    trunc(s2.v_avg,2) dir_reads,
+    trunc(s1.mb_sec,2) pyh_mb_s,
+    trunc(s2.mb_sec,2) dir_mb_s,
+    trunc((s2.v_avg/s1.v_avg)*100,2) R_PCT
+from 
+--S1-B-----------
+(
+select 
+	trunc(b_snap_date,'DD') h_date, 
+	sum(snap_value) svalue, 
+	sum(snap_value/snap_secs) v_avg,
+	sum(snap_value/snap_secs)*v_db_block_size/1024/1024 mb_sec
+from
+(select 
+  s.INSTANCE_NUMBER,
+  cast (s.END_INTERVAL_TIME as date) e_snap_date,
+  cast (s.BEGIN_INTERVAL_TIME as date) b_snap_date,
+  (cast(s.END_INTERVAL_TIME as date) - cast(s.BEGIN_INTERVAL_TIME as date))*24*60*60 snap_secs,
+  t.VALUE,
+  (t.VALUE-LAG (t.VALUE) OVER (ORDER BY s.INSTANCE_NUMBER, s.BEGIN_INTERVAL_TIME)) snap_value
+from 
+  DBA_HIST_SNAPSHOT s,
+  DBA_HIST_SYSSTAT t
+where 1=1
+  and s.SNAP_ID = t.SNAP_ID
+  and s.DBID = t.DBID
+  and s.INSTANCE_NUMBER = t.INSTANCE_NUMBER
+  and s.DBID = (select DBID from V$DATABASE)
+  and t.STAT_NAME = 'physical reads'
+  ) pr,
+  (select VALUE v_db_block_size from v$parameter where name = 'db_block_size')
+where snap_value > 0 
+group by trunc(b_snap_date,'DD'),v_db_block_size
+) S1,
+--S2-B-----------
+(
+select 
+	trunc(b_snap_date,'DD') h_date, 
+	sum(snap_value) svalue, 
+	sum(snap_value/snap_secs) v_avg,
+	sum(snap_value/snap_secs)*v_db_block_size/1024/1024 mb_sec
+from
+(select 
+  s.INSTANCE_NUMBER,
+  cast (s.END_INTERVAL_TIME as date) e_snap_date,
+  cast (s.BEGIN_INTERVAL_TIME as date) b_snap_date,
+  (cast(s.END_INTERVAL_TIME as date) - cast(s.BEGIN_INTERVAL_TIME as date))*24*60*60 snap_secs,
+  t.VALUE,
+  (t.VALUE-LAG (t.VALUE) OVER (ORDER BY s.INSTANCE_NUMBER, s.BEGIN_INTERVAL_TIME)) snap_value
+from 
+  DBA_HIST_SNAPSHOT s,
+  DBA_HIST_SYSSTAT t
+where 1=1
+  and s.SNAP_ID = t.SNAP_ID
+  and s.DBID = t.DBID
+  and s.INSTANCE_NUMBER = t.INSTANCE_NUMBER
+  and s.DBID = (select DBID from V$DATABASE)
+  and t.STAT_NAME = 'physical reads direct'
+  ) pr,
+  (select VALUE v_db_block_size from v$parameter where name = 'db_block_size')
+where snap_value > 0 
+group by trunc(b_snap_date,'DD'),v_db_block_size
+) S2
+--S2-E-----------
+where 1=1
+    and s1.h_date = s2.h_date (+)
+order by 
+    s1.h_date;
+
+
+20:47:02 SYS@PRDB:1>     s1.h_date;
+
+H_DATE               PYH_READS  DIR_READS   PYH_MB_S   DIR_MB_S      R_PCT
+------------------- ---------- ---------- ---------- ---------- ----------
+2012.10.13 00:00:00 7182258.71 3438573.99   56111.39   26863.85      47.87
+2012.10.14 00:00:00  197425.79  106451.68    1542.38     831.65      53.91
+2012.10.15 00:00:00  340838.63  175659.09     2662.8    1372.33      51.53
+2012.10.16 00:00:00  320587.14  166047.04    2504.58    1297.24      51.79
+2012.10.17 00:00:00  332931.01  166361.01    2601.02    1299.69      49.96
+2012.10.18 00:00:00  275016.67  112865.37    2148.56     881.76      41.03
+2012.10.19 00:00:00  231232.39   84517.51     1806.5     660.29      36.55
+2012.10.20 00:00:00  368901.65  267914.39    2882.04    2093.08      72.62
+2012.10.21 00:00:00  188668.74   90299.53    1473.97     705.46      47.86
+2012.10.22 00:00:00  305844.59  125066.75    2389.41     977.08      40.89
+2012.10.23 00:00:00  296552.35  119541.96    2316.81     933.92      40.31
+2012.10.24 00:00:00  292472.39  105291.39    2284.94     822.58         36
+2012.10.25 00:00:00  281907.45   94766.69     2202.4     740.36      33.61
+2012.10.26 00:00:00  255247.13   91547.22    1994.11     715.21      35.86
+2012.10.27 00:00:00  375644.55  268709.48    2934.72    2099.29      71.53
+2012.10.28 00:00:00  193261.18   89708.18    1509.85     700.84      46.41
+2012.10.29 00:00:00  271649.86  100420.52    2122.26     784.53      36.96
+2012.10.30 00:00:00  274005.74  104592.98    2140.66     817.13      38.17
+2012.10.31 00:00:00  268478.68   97316.07    2097.48     760.28      36.24
+2012.11.01 00:00:00  288801.97    99238.3    2256.26     775.29      34.36
+2012.11.02 00:00:00  272224.34   99781.45    2126.75     779.54      36.65
+2012.11.03 00:00:00  377008.45  268825.97    2945.37     2100.2       71.3
+2012.11.04 00:00:00  202999.28   94121.92    1585.93     735.32      46.36
+2012.11.05 00:00:00  300341.68  115867.78    2346.41     905.21      38.57
+2012.11.06 00:00:00  252722.26   88281.83    1974.39      689.7      34.93
+2012.11.07 00:00:00  276024.51   93638.22    2156.44     731.54      33.92
+2012.11.08 00:00:00  286561.66   97230.64    2238.76     759.61      33.93
+2012.11.09 00:00:00  229867.02   73418.53    1795.83     573.58      31.93
+2012.11.10 00:00:00  404970.36  315959.71    3163.83    2468.43      78.02
+2012.11.11 00:00:00  609995.24  535025.04    4765.58    4179.88       87.7
+2012.11.12 00:00:00  890984.34  798587.25    6960.81    6238.96      89.62
+2012.11.13 00:00:00   499224.6  412200.06    3900.19    3220.31      82.56
+
+32 rows selected.
+
+20:47:02 SYS@PRDB:1>
+
+
+
+======================================================================
+### Historical TOP SQL 'physical reads','physical reads direct' stats 
+======================================================================
+
+
+-- TOP SQL's (physical reads) for last 3 days ( SQL + Execution plan )
+NOTES:
+-- Check hard parses before making any further conclusions
+-- This is top for ALL hours (business and out of business)
+
+select a.*, 
+	trunc(DISK_READS*v_db_block_size/1024/1024/1024,2) Disk_Reads_TB, 
+	decode(0,EXECUTIONS,0,trunc((DISK_READS*v_db_block_size/1024/1024)/EXECUTIONS)) MB_P_EXE from
+(SELECT 
+	st.sql_id, 
+	st.PLAN_HASH_VALUE,
+	sum(st.DISK_READS_DELTA) DISK_READS,
+	sum(st.EXECUTIONS_DELTA) EXECUTIONS
+FROM DBA_HIST_SQLSTAT st,
+  DBA_HIST_SNAPSHOT sh,
+  DBA_HIST_SQLTEXT tx 
+WHERE tx.sql_ID           = st.sql_ID
+AND sh.SNAP_ID           = st.SNAP_ID
+AND tx.COMMAND_TYPE != 47
+AND sh.end_interval_time   > sysdate - 3
+AND st.DISK_READS_DELTA is not null
+group by st.sql_id, st.PLAN_HASH_VALUE
+order by sum(st.DISK_READS_DELTA) desc) a,
+(select VALUE v_db_block_size from v$parameter where name = 'db_block_size') p
+where rownum < 11
+order by sql_id;
+
+SQL_ID        PLAN_HASH_VALUE DISK_READS EXECUTIONS   MB_P_EXE
+------------- --------------- ---------- ---------- ----------
+22b712p6m4b39      3506462058  245376910        129      14860
+2c9xacvpusa5p       424879385  275138842      15964        134
+2g8k03nrrzh1s      3261426897  261209886       3033        672
+38qbsw6cg7ap8      2988079270 1724027904     297018         45
+4gf91gfubc1kw      1693642512  311317707     335565          7
+8rdvn38mf8nua      3062920809  481802611        890       4229
+buzf6hvm74nmt      2004931249 3360622928        212     123843
+ggtfktqa30wr8      2272411800  728743815       2282       2494
+ghm3m4tfqkrwh      1949707506  467365038          6     608548
+gmbnaf9n006qq      1565894275  553932483      23703        182
+
+-- Current statistis since last instances restart per SQL/Exacution plan
+
+select
+        sql_id,
+        PLAN_HASH_VALUE,
+        DISK_READS,
+        executions,
+        decode(executions,0,0,trunc((DISK_READS/executions)*8/1024)) MB_P_EXE,
+        INSTANCE_NUMBER,
+        sysdate,
+        STARTUP_TIME,
+        trunc((sysdate-STARTUP_TIME)*24*60) inst_run_mins
+from
+        gv$sqlstats s,
+        gv$instance i
+where sql_id in (
+'22b712p6m4b39'
+,'2c9xacvpusa5p'
+,'2g8k03nrrzh1s'
+,'38qbsw6cg7ap8'
+,'4gf91gfubc1kw'
+,'8rdvn38mf8nua'
+,'buzf6hvm74nmt'
+,'ggtfktqa30wr8'
+,'ghm3m4tfqkrwh'
+,'gmbnaf9n006qq')
+and i.INSTANCE_NUMBER = s.inst_id
+order by sql_id, DISK_READS;
+
+SQL_ID        PLAN_HASH_VALUE DISK_READS EXECUTIONS   MB_P_EXE INSTANCE_NUMBER SYSDATE             STARTUP_TIME        INST_RUN_MINS
+------------- --------------- ---------- ---------- ---------- --------------- ------------------- ------------------- -------------
+22b712p6m4b39      4242754603          0          0          0               1 2012.11.13 18:01:32 2012.11.13 16:41:16            80
+2g8k03nrrzh1s      3518239439       9558         75          0               3 2012.11.13 18:01:32 2012.11.13 16:41:11            80
+4gf91gfubc1kw      1693642512          0          0          0               2 2012.11.13 18:01:32 2012.11.13 16:41:11            80
+8rdvn38mf8nua      3062920809     396436          1       3097               3 2012.11.13 18:01:32 2012.11.13 16:41:11            80
+8rdvn38mf8nua      3062920809     440218          1       3439               1 2012.11.13 18:01:32 2012.11.13 16:41:16            80
+8rdvn38mf8nua      3062920809    1049309          5       1639               2 2012.11.13 18:01:32 2012.11.13 16:41:11            80
+buzf6hvm74nmt       692949235          1          1          0               1 2012.11.13 18:01:32 2012.11.13 16:41:16            80
+ggtfktqa30wr8      2272411800          0         92          0               1 2012.11.13 18:01:32 2012.11.13 16:41:16            80
+ggtfktqa30wr8      2272411800          0          0          0               2 2012.11.13 18:01:32 2012.11.13 16:41:11            80
+ggtfktqa30wr8      2272411800          0         63          0               3 2012.11.13 18:01:32 2012.11.13 16:41:11            80
+
+10 rows selected.
+
+
+-- Extended historical statistics per SQL per executin plan
+
+SELECT 
+	st.sql_id,
+	trunc(cast(sh.end_interval_time as date),'DD') DDATE,
+	st.PLAN_HASH_VALUE,
+	sum(st.DISK_READS_DELTA) DISK_READS,
+	sum(st.PHYSICAL_READ_BYTES_DELTA) PHY_READ_BYTES,
+	sum(st.PHYSICAL_READ_REQUESTS_DELTA) PHY_READ_REQUESTS,
+	sum(st.PHYSICAL_WRITE_BYTES_DELTA) PHY_WRITE_BYTES,
+	sum(st.PHYSICAL_WRITE_REQUESTS_DELTA) PHY_WRITE_REQUESTS,
+	sum(st.DIRECT_WRITES_DELTA) DIRECT_WRITES,
+	sum(st.EXECUTIONS_DELTA) EXECUTIONS,
+	decode(sum(st.EXECUTIONS_DELTA),0,0,trunc(sum(st.DISK_READS_DELTA)/sum(st.EXECUTIONS_DELTA))) DISK_READS_PER_EXE
+FROM DBA_HIST_SQLSTAT st,
+  DBA_HIST_SNAPSHOT sh
+WHERE sh.SNAP_ID           = st.SNAP_ID
+AND st.sql_id in (
+'6s31g5avz8kh8',
+'2g8k03nrrzh1s',
+'22b712p6m4b39',
+'4gf91gfubc1kw',
+'gmbnaf9n006qq',
+'ghm3m4tfqkrwh',
+'ggtfktqa30wr8',
+'8rdvn38mf8nua',
+'38qbsw6cg7ap8',
+'buzf6hvm74nmt')
+AND sh.end_interval_time   > sysdate - 14
+AND st.PHYSICAL_READ_BYTES_DELTA is not null
+group by
+ 	st.sql_id,
+	trunc(cast(sh.end_interval_time as date),'DD'),
+	st.PLAN_HASH_VALUE
+order by st.sql_id, trunc(cast(sh.end_interval_time as date),'DD');
