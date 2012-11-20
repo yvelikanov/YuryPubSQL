@@ -100,7 +100,7 @@ exec dbms_stats.delete_table_stats(ownname=>'INV',tabname=>'MTL_PARAMETERS',CASC
 exec dbms_stats.delete_table_stats(ownname=>'INV',tabname=>'MTL_SYSTEM_ITEMS_B',CASCADE_PARTS=>TRUE, CASCADE_COLUMNS=> TRUE, CASCADE_INDEXES=> TRUE);
 exec dbms_stats.delete_table_stats(ownname=>'ONT',tabname=>'OE_ORDER_LINES_ALL',CASCADE_PARTS=>TRUE, CASCADE_COLUMNS=> TRUE, CASCADE_INDEXES=> TRUE);
 exec dbms_stats.delete_table_stats(ownname=>'ONT',tabname=>'OE_TRANSACTION_TYPES_TL',CASCADE_PARTS=>TRUE, CASCADE_COLUMNS=> TRUE, CASCADE_INDEXES=> TRUE);
-exec dbms_stats.delete_table_stats(ownname=>'XXHBP',tabname=>'HBP_CONV_CUM_PROD_SALES',CASCADE_PARTS=>TRUE, CASCADE_COLUMNS=> TRUE, CASCADE_INDEXES=> TRUE);
+exec dbms_stats.delete_table_stats(ownname=>'XXCUST',tabname=>'CUST_CONV_CUM_PROD_SALES',CASCADE_PARTS=>TRUE, CASCADE_COLUMNS=> TRUE, CASCADE_INDEXES=> TRUE);
 
 begin sys.dbms_stats.create_stat_table(ownname=>'APPS',stattab=>'phy_pln_obj_01',tblspace=>'perfstat'); end;
 /
