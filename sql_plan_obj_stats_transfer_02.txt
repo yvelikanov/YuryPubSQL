@@ -62,8 +62,6 @@ where 1=1
 ) order by owner, table_name;
 --#C#E#########################################
 begin
--- execute immediate 'truncate table system.vjv_stat_imp_atbirums';
--- dbms_stats.gather_table_stats(ownname=>'SYS',tabname=>'SYSAUTH$',cascade=>true);
   for r_stat in c_all_pln_obj
   loop
     begin
