@@ -1,0 +1,188 @@
+##### On the source
+
+EXPLAIN PLAN 
+SET STATEMENT_ID = 'SQL_BAD_PLAN_01' 
+INTO apps.plan_table 
+FOR SELECT
+....
+
+12:30:50 APPS@PRDB:1>
+
+Explained.
+
+
+select count(*) from apps.plan_table where STATEMENT_ID = 'SQL_BAD_PLAN_01';
+
+12:32:20 APPS@PRDB:1> select count(*) from apps.plan_table where STATEMENT_ID = 'SQL_BAD_PLAN_01';
+
+       COUNT(*)
+---------------
+             87
+
+1 row selected.
+
+12:32:38 APPS@PRDB:1>
+
+
+begin sys.dbms_stats.create_stat_table(ownname=>'APPS',stattab=>'phy_pln_obj_01',tblspace=>'perfstat'); end;
+/
+
+select count(*) from apps.plan_table where STATEMENT_ID = 'SQL_BAD_PLAN_01';
+-- Should be 0
+
+-- The following code export statistics for all objects involved in the execution plan to phy_pln_obj_01 table.
+declare
+	v_ownname varchar2(30):='APPS';
+	v_stattab varchar2(30):='phy_pln_obj_01';
+	cursor c_all_pln_obj is 
+--#C#B#########################################
+with all_pln_obj as (select 
+	pt.object_owner,
+	pt.object_name,
+	pt.object_type
+from 
+	apps.plan_table pt
+where 1=1
+	and pt.STATEMENT_ID = 'SQL_BAD_PLAN_01'
+	and pt.object_name is not null
+	and pt.object_type!='VIEW')
+--==============================================
+select distinct owner, table_name from 
+(
+-- All tables used in the SQL plan
+select object_owner owner, object_name table_name from all_pln_obj 
+where object_type='TABLE'
+union all 
+-- All tabkles used in the SQL plan via indexes
+select table_owner, table_name from dba_indexes di, all_pln_obj ao
+where 1=1
+	and di.owner=ao.object_owner
+	and di.index_name=ao.object_name
+	and ao.object_type like '%INDEX%'
+) order by owner, table_name;
+--#C#E#########################################
+begin
+-- execute immediate 'truncate table system.vjv_stat_imp_atbirums';
+-- dbms_stats.gather_table_stats(ownname=>'SYS',tabname=>'SYSAUTH$',cascade=>true);
+  for r_stat in c_all_pln_obj
+  loop
+    begin
+      dbms_output.put_line('exec dbms_stats.delete_table_stats(ownname=>'''||r_stat.owner||''',tabname=>'''||r_stat.table_name||''',CASCADE_PARTS=>TRUE, CASCADE_COLUMNS=> TRUE, CASCADE_INDEXES=> TRUE);
+
+	  DBMS_STATS.EXPORT_TABLE_STATS (				ownname=>r_stat.owner, 
+	  								tabname=>r_stat.table_name,
+									stattab=>v_stattab, 
+									cascade=>TRUE,
+									statown=>v_ownname);
+      exception
+        when others then
+        dbms_output.put_line('Fail to export table: '||r_stat.owner||'.'||r_stat.table_name);
+    end;
+  end loop;
+end;
+/
+
+
+##### On the destination
+# I leave it to you to backup stats from dev tables
+
+exec dbms_stats.delete_table_stats(ownname=>'APPLSYS',tabname=>'FND_FLEX_VALUES',CASCADE_PARTS=>TRUE, CASCADE_COLUMNS=> TRUE, CASCADE_INDEXES=> TRUE);
+exec dbms_stats.delete_table_stats(ownname=>'APPLSYS',tabname=>'FND_ID_FLEX_STRUCTURES',CASCADE_PARTS=>TRUE, CASCADE_COLUMNS=> TRUE, CASCADE_INDEXES=> TRUE);
+exec dbms_stats.delete_table_stats(ownname=>'APPLSYS',tabname=>'FND_ID_FLEX_STRUCTURES_TL',CASCADE_PARTS=>TRUE, CASCADE_COLUMNS=> TRUE, CASCADE_INDEXES=> TRUE);
+exec dbms_stats.delete_table_stats(ownname=>'AR',tabname=>'RA_CUSTOMER_TRX_ALL',CASCADE_PARTS=>TRUE, CASCADE_COLUMNS=> TRUE, CASCADE_INDEXES=> TRUE);
+exec dbms_stats.delete_table_stats(ownname=>'AR',tabname=>'RA_CUSTOMER_TRX_LINES_ALL',CASCADE_PARTS=>TRUE, CASCADE_COLUMNS=> TRUE, CASCADE_INDEXES=> TRUE);
+exec dbms_stats.delete_table_stats(ownname=>'BOM',tabname=>'BOM_COMPONENTS_B',CASCADE_PARTS=>TRUE, CASCADE_COLUMNS=> TRUE, CASCADE_INDEXES=> TRUE);
+exec dbms_stats.delete_table_stats(ownname=>'BOM',tabname=>'BOM_STRUCTURES_B',CASCADE_PARTS=>TRUE, CASCADE_COLUMNS=> TRUE, CASCADE_INDEXES=> TRUE);
+exec dbms_stats.delete_table_stats(ownname=>'INV',tabname=>'MTL_CATEGORIES_B',CASCADE_PARTS=>TRUE, CASCADE_COLUMNS=> TRUE, CASCADE_INDEXES=> TRUE);
+exec dbms_stats.delete_table_stats(ownname=>'INV',tabname=>'MTL_CATEGORIES_TL',CASCADE_PARTS=>TRUE, CASCADE_COLUMNS=> TRUE, CASCADE_INDEXES=> TRUE);
+exec dbms_stats.delete_table_stats(ownname=>'INV',tabname=>'MTL_ITEM_CATEGORIES',CASCADE_PARTS=>TRUE, CASCADE_COLUMNS=> TRUE, CASCADE_INDEXES=> TRUE);
+exec dbms_stats.delete_table_stats(ownname=>'INV',tabname=>'MTL_PARAMETERS',CASCADE_PARTS=>TRUE, CASCADE_COLUMNS=> TRUE, CASCADE_INDEXES=> TRUE);
+exec dbms_stats.delete_table_stats(ownname=>'INV',tabname=>'MTL_SYSTEM_ITEMS_B',CASCADE_PARTS=>TRUE, CASCADE_COLUMNS=> TRUE, CASCADE_INDEXES=> TRUE);
+exec dbms_stats.delete_table_stats(ownname=>'ONT',tabname=>'OE_ORDER_LINES_ALL',CASCADE_PARTS=>TRUE, CASCADE_COLUMNS=> TRUE, CASCADE_INDEXES=> TRUE);
+exec dbms_stats.delete_table_stats(ownname=>'ONT',tabname=>'OE_TRANSACTION_TYPES_TL',CASCADE_PARTS=>TRUE, CASCADE_COLUMNS=> TRUE, CASCADE_INDEXES=> TRUE);
+exec dbms_stats.delete_table_stats(ownname=>'XXHBP',tabname=>'HBP_CONV_CUM_PROD_SALES',CASCADE_PARTS=>TRUE, CASCADE_COLUMNS=> TRUE, CASCADE_INDEXES=> TRUE);
+
+begin sys.dbms_stats.create_stat_table(ownname=>'APPS',stattab=>'phy_pln_obj_01',tblspace=>'perfstat'); end;
+/
+
+
+##### On the source
+CREATE DATABASE LINK FROM_PRDB_TO_DVDB_01
+CONNECT TO APPS 
+IDENTIFIED BY password
+USING '(DESCRIPTION=(ADDRESS=(PROTOCOL=tcp)(HOST=dev host)(PORT=dev port))(CONNECT_DATA=(SERVICE_NAME=DVDB)))';
+
+insert into apps.phy_pln_obj_01@FROM_PRDB_TO_DVDB_01 select * from apps.phy_pln_obj_01;
+
+
+14:24:40 APPS@PRDB:1> insert into apps.phy_pln_obj_01@FROM_PRDB_TO_DVDB_01 select * from apps.phy_pln_obj_01;
+
+1782 rows created.
+
+14:26:18 APPS@PRDB:1>
+
+
+##### On the destination
+
+14:25:27 APPS@DVDB:1> select count(*) from apps.phy_pln_obj_01;
+
+       COUNT(*)
+---------------
+           1782
+
+14:26:58 APPS@DVDB:1>
+
+
+-- Time to delete stats and import the stats from EBSP
+
+-- Executed all DELETE commands in EBSD
+
+
+declare
+  cursor c_stat is select distinct c5 owner, c1 table_name, STATID  from
+      apps.phy_pln_obj_01 where TYPE = 'T';
+begin
+  for r_stat in c_stat
+  loop
+    begin
+      dbms_output.put_line('Importing stats for '||r_stat.owner||'.'||r_stat.table_name);
+	  DBMS_STATS.IMPORT_TABLE_STATS (ownname=>r_stat.owner, 
+	  								tabname=>r_stat.table_name,
+									statid=>r_stat.STATID,
+									stattab=>'phy_pln_obj_01', 
+									cascade=>TRUE,
+									statown=>'apps');
+    end;
+  end loop;
+end;
+/
+
+
+
+14:31:15 APPS@DVDB:1> declare
+14:32:26 APPS@DVDB:1>   cursor c_stat is select distinct c5 owner, c1 table_name, STATID  from
+14:32:26 APPS@DVDB:1>       apps.phy_pln_obj_01 where TYPE = 'T';
+14:32:26 APPS@DVDB:1> begin
+14:32:26 APPS@DVDB:1>   for r_stat in c_stat
+14:32:26 APPS@DVDB:1>   loop
+14:32:26 APPS@DVDB:1>     begin
+14:32:26 APPS@DVDB:1>       dbms_output.put_line('Importing stats for '||r_stat.owner||'.'||r_stat.table_name);
+14:32:26 APPS@DVDB:1>     DBMS_STATS.IMPORT_TABLE_STATS (ownname=>r_stat.owner,
+14:32:26 APPS@DVDB:1>                                                                   tabname=>r_stat.table_name,
+14:32:26 APPS@DVDB:1>                                                                   statid=>r_stat.STATID,
+14:32:26 APPS@DVDB:1>                                                                   stattab=>'phy_pln_obj_01',
+14:32:26 APPS@DVDB:1>                                                                   cascade=>TRUE,
+14:32:26 APPS@DVDB:1>                                                                   statown=>'apps');
+14:32:26 APPS@DVDB:1>     end;
+14:32:26 APPS@DVDB:1>   end loop;
+14:32:26 APPS@DVDB:1> end;
+14:32:26 APPS@DVDB:1> /
+Importing stats for YO.SUPER_COOL_TAB
+Importing stats for YO2.SUPER_COOL_TAB2
+....
+
+PL/SQL procedure successfully completed.
+
+14:32:29 APPS@DVDB:1>
+
+## Check the execution plan
